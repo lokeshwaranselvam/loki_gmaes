@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hand Cricket</title>
+  <style>
+    body { text-align: center; font-family: Arial; }
+    .btn { font-size: 2em; margin: 10px; padding: 10px; }
+    #status { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Hand Cricket Multiplayer</h1>
+  <div>
+    <button onclick="createRoom()">Create Room</button>
+    <input id="roomCodeInput" placeholder="Enter Room Code">
+    <button onclick="joinRoom()">Join Room</button>
+  </div>
+  <h2 id="roleText"></h2>
+  <div id="buttons" style="display:none;">
+    <button class="btn" onclick="play(1)">1</button>
+    <button class="btn" onclick="play(2)">2</button>
+    <button class="btn" onclick="play(3)">3</button><br>
+    <button class="btn" onclick="play(4)">4</button>
+    <button class="btn" onclick="play(5)">5</button>
+    <button class="btn" onclick="play(6)">6</button>
+  </div>
+  <div id="status"></div>
+
+  <script>
+    let room = '', role = '', player = '', score = 0;
+
+    async function createRoom() {
+      const res = await fetch('/create_room', { method: 'POST' });
+      const data = await res.json();
+      room = data.room_code;
+      alert('Room created: ' + room);
+    }
+
+    async function joinRoom() {
+      room = document.getElementById('roomCodeInput').value;
+      const res = await fetch(`/join_room/${room}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.error) return alert(data.error);
+      role = data.role;
+      player = role === 'batsman' ? 'player1' : 'player2';
+      document.getElementById('roleText').innerText = `You are the ${role}`;
+      document.getElementById('buttons').style.display = 'block';
+      pollState();
+    }
+
+    async function play(num) {
+      await fetch('/submit_move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room, player, move: num })
+      });
+    }
+
+    async function pollState() {
+      setInterval(async () => {
+        const res = await fetch(`/get_state/${room}`);
+        const data = await res.json();
+        const m = data.moves;
+        const status = document.getElementById('status');
+        if (m.player1 && m.player2) {
+          if (m.player1 === m.player2) {
+            status.innerText = (player === 'player1') === (role === 'batsman') ? "You're OUT!" : "You got the opponent OUT!";
+            role = role === 'batsman' ? 'bowler' : 'batsman';
+            document.getElementById('roleText').innerText = `Now you're ${role}`;
+          } else {
+            if (player === 'player1' && role === 'batsman') {
+              score += m.player1;
+              status.innerText = `You scored! Total: ${score}`;
+            }
+            if (player === 'player2' && role === 'batsman') {
+              score += m.player2;
+              status.innerText = `You scored! Total: ${score}`;
+            }
+          }
+          await fetch(`/reset_moves/${room}`, { method: 'POST' });
+        }
+      }, 1500);
+    }
+  </script>
+</body>
+</html>
